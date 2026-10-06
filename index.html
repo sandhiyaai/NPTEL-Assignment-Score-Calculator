@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NPTEL Assignment Score Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef2f7;--card:#fff;--ink:#14213d;--muted:#5b6b85;--line:#d3dbe8;--accent:#0f766e;--accent-ink:#fff;--soft:#e1f3f0;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1626;--card:#16213a;--ink:#e8eefb;--muted:#9aabc7;--line:#2b3a5a;--accent:#2dd4bf;--accent-ink:#06211e;--soft:#12362f}}
+:root[data-theme="dark"]{--bg:#0e1626;--card:#16213a;--ink:#e8eefb;--muted:#9aabc7;--line:#2b3a5a;--accent:#2dd4bf;--accent-ink:#06211e;--soft:#12362f}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:28px 18px 48px}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 22px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px}
+label{display:block;font-weight:600;margin-bottom:6px}
+input,select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:8px;padding:10px 12px}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.row{display:grid;gap:14px}
+@media(min-width:520px){.row{grid-template-columns:2fr 1fr}}
+.weeks{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin-top:6px}
+.weeks label{font-weight:400;color:var(--muted);font-size:.9rem;margin-bottom:4px}
+button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:12px 18px;cursor:pointer}
+.go{background:var(--accent);color:var(--accent-ink);width:100%;margin-top:18px}
+.reset{background:transparent;color:var(--muted);border:1.5px solid var(--line);margin-top:10px;width:100%}
+.err{color:#c2410c;margin:12px 0 0;min-height:1.2em;font-size:.95rem}
+.result{background:var(--soft);border-color:var(--accent)}
+.result h2{margin:0 0 2px;font-size:1.15rem}
+.lbl{color:var(--muted);font-weight:600;margin-top:8px}
+.big{font-size:clamp(3.6rem,17vw,5.6rem);font-weight:800;letter-spacing:-.04em;line-height:1.05;color:var(--accent)}
+.big small{font-size:1.6rem;color:var(--muted);font-weight:600;letter-spacing:0}
+.msg{font-size:1.3rem;font-weight:700;margin-top:6px}
+.stats{display:grid;gap:8px;margin-top:14px;font-size:.98rem}
+.stats div{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--line);padding-top:8px}
+.note{color:var(--muted);font-size:.85rem;margin-top:12px}
+[hidden]{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>NPTEL assignment calculator</h1>
+  <p class="sub">Enter your weekly assignment marks to see your average.</p>
+
+  <div class="panel">
+    <div class="row">
+      <div>
+        <label for="course">Course name</label>
+        <input id="course" type="text" placeholder="e.g. Data Structures and Algorithms" autocomplete="off">
+      </div>
+      <div>
+        <label for="duration">Course length</label>
+        <select id="duration">
+          <option value="4">4 weeks</option>
+          <option value="6">6 weeks</option>
+          <option value="12" selected>12 weeks</option>
+        </select>
+      </div>
+    </div>
+    <div class="weeks" id="weeks" style="margin-top:18px"></div>
+    <p class="err" id="err" role="alert"></p>
+    <button class="go" id="calc">Calculate average</button>
+    <button class="reset" id="reset">Clear marks</button>
+  </div>
+
+  <div class="panel result" id="result" hidden aria-live="polite">
+    <h2 id="rname"></h2>
+    <div class="lbl">Assignment contribution (25% of final)</div>
+    <div class="big"><span id="contrib"></span><small> / 25</small></div>
+    <div class="msg" id="msg"></div>
+    <div class="stats">
+      <div><span>Average of all entered weeks</span><strong id="avg"></strong></div>
+      <div><span id="bestLabel"></span><strong id="best"></strong></div>
+      <div><span>Assignments counted</span><strong id="cnt"></strong></div>
+    </div>
+    <p class="note" id="note"></p>
+  </div>
+</main>
+
+<script>
+// Best-of rule: NPTEL counts the best scores only. 4 wk -> best 3, 12 wk -> best 8.
+// 6 wk is an assumption (best 4); change BEST_OF if your course says otherwise.
+const BEST_OF = {4:3, 6:4, 12:8};
+const $ = id => document.getElementById(id);
+
+function buildInputs(){
+  const n = +$("duration").value;
+  $("weeks").innerHTML = "";
+  for(let i=1;i<=n;i++){
+    const d = document.createElement("div");
+    d.innerHTML = `<label for="w${i}">Week ${i}</label><input id="w${i}" type="number" inputmode="decimal" min="0" max="100" step="any" placeholder="0–100">`;
+    $("weeks").appendChild(d);
+  }
+  $("result").hidden = true; $("err").textContent = "";
+}
+
+function calculate(){
+  const n = +$("duration").value, marks = [];
+  for(let i=1;i<=n;i++){
+    const raw = $("w"+i).value.trim();
+    if(raw === "") continue;
+    const v = parseFloat(raw);
+    if(isNaN(v) || v<0 || v>100){ $("err").textContent = `Week ${i}: enter a mark between 0 and 100.`; $("result").hidden = true; return; }
+    marks.push(v);
+  }
+  if(!marks.length){ $("err").textContent = "Enter at least one week's mark."; $("result").hidden = true; return; }
+  $("err").textContent = "";
+
+  const avg = marks.reduce((a,b)=>a+b,0)/marks.length;
+  const k = Math.min(BEST_OF[n], marks.length);
+  const top = [...marks].sort((a,b)=>b-a).slice(0,k);
+  const bestAvg = top.reduce((a,b)=>a+b,0)/k;
+
+  $("rname").textContent = $("course").value.trim() || "Your course";
+  $("avg").textContent = avg.toFixed(2);
+  $("cnt").textContent = `${marks.length} of ${n}`;
+  $("bestLabel").textContent = `Average of best ${k}`;
+  $("best").textContent = bestAvg.toFixed(2);
+  $("contrib").textContent = (bestAvg*0.25).toFixed(2);
+  $("msg").textContent = bestAvg >= 90 ? "🎉 Congrats! Outstanding work. Keep it up!"
+    : bestAvg >= 75 ? "👏 Congrats! Great score. Keep it up!"
+    : bestAvg >= 50 ? "👍 Good going! Keep it up and push a little more."
+    : "💪 You can still do well. The exam carries 75%, so keep going!";
+  $("note").textContent = marks.length < n
+    ? `Based on the ${marks.length} weeks you entered. Missing weeks are not counted.`
+    : `Best-of average follows NPTEL's rule of counting only your top ${BEST_OF[n]} assignments.`;
+  $("result").hidden = false;
+  $("result").scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+$("duration").addEventListener("change", buildInputs);
+$("calc").addEventListener("click", calculate);
+$("reset").addEventListener("click", buildInputs);
+document.addEventListener("keydown", e => { if(e.key==="Enter" && e.target.tagName==="INPUT") calculate(); });
+buildInputs();
+</script>
+</body>
+</html>
